@@ -15,4 +15,9 @@ exec_c = (root / 'common/fs/exec.c').read_text()
 assert 'is_su_session = !ksu_handle_execveat_sucompat' in exec_c
 assert 'ksu_handle_post_execveat_sucompat(&fd' in exec_c
 assert 'KERNEL_SU_UAPI_VERSION, 5' in (root / 'KernelSU/kernel/include/uapi/supercall.h').read_text()
+for name in ('fs/exec.c', 'fs/open.c', 'fs/stat.c'):
+    contents = (root / 'common' / name).read_text()
+    assert 'extern bool ksu_su_compat_enabled;' in contents, name
+    assert 'READ_ONCE(ksu_su_compat_enabled)' in contents, name
+    assert 'static_branch_likely(&ksu_su_compat_enabled)' not in contents, name
 print('Pinned common source, SUSFS hooks, UAPI and configuration checks passed.')

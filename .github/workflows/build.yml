@@ -728,6 +728,9 @@ jobs:
           SUB_LEVEL: ${{ inputs.sub_level }}
         run: bash "$GITHUB_WORKSPACE/scripts/susfs_fixes/apply.sh"
 
+      - name: Match SUSFS hook types to pinned SukiSU
+        run: python3 scripts/pixel6a/prepare_susfs.py "$KERNEL_ROOT"
+
       - name: 生成 SUSFS 集成补丁
         if: env.SUSFS_PATCH_EXPORT == 'true'
         working-directory: ${{ env.KERNEL_ROOT }}/common

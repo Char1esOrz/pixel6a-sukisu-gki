@@ -6,6 +6,8 @@ The common-kernel revision matches a previously booted kernel. SukiSU and SUSFS 
 
 SUSFS is enabled. KPM, BBG, ReKernel and additional ZRAM changes are disabled. No custom seccomp-cache patch is included. Sources are listed in `config/pixel6a-sources.json`. The reusable builder derives from zzh20188/GKI_KernelSU_SUSFS v2.3.0-r4; upstream licenses are preserved.
 
+The pinned SUSFS patch declares `ksu_su_compat_enabled` as a static key, but the pinned builtin driver defines it as a boolean. The three SUSFS call sites are adapted to `extern bool` and `READ_ONCE`, preserving the driver's feature toggle. Treating this boolean as a static-key object would create invalid jump-table references; this integration check is required before compiling.
+
 Run only `Pixel 6a SukiSU 4.2.1 candidate` manually. It uploads the AnyKernel3 package and a build provenance artifact. The workflow does not publish a release or flash a device. Other upstream workflows are archived with `.disabled` extensions. Any patch rejection stops the build before compilation.
 
 Successful compilation does not establish boot compatibility. Inspect the binary's UAPI, configuration, and module symbol CRCs against the firmware before considering a controlled boot test. Preserve the known-working and stock boot images.
