@@ -1,0 +1,25 @@
+name: Pixel 6a SukiSU 4.2.1 candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pixel6a-candidate
+  cancel-in-progress: false
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      android_version: android14
+      kernel_version: '6.1'
+      sub_level: '162'
+      os_patch_level: '2026-03'
+      ksu_variant: SukiSU
+      ksu_mode: 关闭
+      build_time: 'N'
+      use_zram: false
+      use_bbg: false
+      use_kpm: disabled (关闭)
+      use_rekernel: false
+      enable_susfs: true
+      artifact_upload_mode: 仅上传 AnyKernel3.zip

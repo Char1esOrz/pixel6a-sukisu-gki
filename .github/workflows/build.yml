@@ -1,8 +1,7 @@
 name: 内核构建流程
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 on:
   workflow_call:
@@ -93,7 +92,7 @@ jobs:
   build-kernel:
     name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}-${{ inputs.ksu_variant }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -299,13 +298,14 @@ jobs:
 
           echo "克隆 AnyKernel3..."
           git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+          git -C AnyKernel3 checkout --detach e1e9dce98430c5c6f231f7094a8c7f4ecaf50948
           rm -rf AnyKernel3/.git
 
           echo "克隆 SUSFS (分支: $SUSFS_BRANCH)..."
           if [ -n "$LEGACY_SUKISU_CONFIG" ]; then
             git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
           elif [ "${{ inputs.ksu_variant }}" == "SukiSU" ]; then
-            if ! git clone https://github.com/ShirkNeko/susfs4ksu.git -b "$SUSFS_BRANCH" 2>/dev/null; then
+            if ! git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH" 2>/dev/null; then
               echo "ShirkNeko 仓库未找到分支 $SUSFS_BRANCH，回退到 simonpunk 原版..."
               git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
             fi
@@ -446,6 +446,13 @@ jobs:
 
           echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
           echo "TAG_FALLBACK=$TAG_FALLBACK" >> $GITHUB_ENV
+
+      - name: Pin known working Pixel 6a common source
+        working-directory: ${{ env.KERNEL_ROOT }}/common
+        run: |
+          git fetch --depth=1 origin 1563b4144ef81c66cfbe02e85bb3570fd2167dfd
+          git checkout --detach 1563b4144ef81c66cfbe02e85bb3570fd2167dfd
+          test "$(git rev-parse HEAD)" = 1563b4144ef81c66cfbe02e85bb3570fd2167dfd
 
       - name: 应用 Stock Config 伪装
         run: |
@@ -614,7 +621,7 @@ jobs:
               ;;
             "SukiSU")
               echo "添加 ${{ inputs.ksu_variant }}..."
-              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/ee35e65428054476c279eae59f7f2bba272040b9/kernel/setup.sh" | bash $BRANCH
               ;;
             "ReSukiSU")
               echo "添加 ReSukiSU..."
@@ -626,7 +633,7 @@ jobs:
                 exit 1
               fi
               echo "添加 ${{ inputs.ksu_variant }}..."
-              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/ee35e65428054476c279eae59f7f2bba272040b9/kernel/setup.sh" | bash $BRANCH
               ;;
           esac
 
@@ -636,6 +643,9 @@ jobs:
           else
             echo "KSU_LATEST_COMMIT_DATE=未知" >> $GITHUB_ENV
           fi
+
+      - name: Prepare pinned builtin driver for UAPI 5
+        run: python3 scripts/pixel6a/prepare_driver.py "$KERNEL_ROOT/KernelSU"
 
       - name: 配置 SukiSU 管理器信息
         if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'SukiSU(40726)' || inputs.ksu_variant == 'SukiSU(40548)') && inputs.ksu_mode != '禁用KSU'
@@ -1310,13 +1320,16 @@ jobs:
             fi
           fi
 
+      - name: Validate integration before compiling
+        run: python3 scripts/pixel6a/validate_integration.py "$KERNEL_ROOT"
+
       - name: 编译内核
         id: compile_kernel
         uses: nick-fields/retry@v4
         with:
           shell: bash
-          timeout_minutes: 30
-          max_attempts: 3
+          timeout_minutes: 60
+          max_attempts: 1
           retry_on: timeout
           command: |
             LOG_DIR="$GITHUB_WORKSPACE/build-logs"
@@ -1471,7 +1484,7 @@ jobs:
           mv ./Image "$ANYKERNEL3/Image"
 
       - name: 构建 Boot 镜像 (Android 12)
-        if: inputs.android_version == 'android12'
+        if: inputs.android_version == 'android12' && inputs.artifact_upload_mode == '上传全部'
         working-directory: bootimgs
         run: |
           GKI_URL=https://dl.google.com/android/gki/gki-certified-boot-android12-5.10-${{ inputs.os_patch_level }}_${{ inputs.revision }}.zip
@@ -1502,7 +1515,7 @@ jobs:
           cp ./boot-lz4.img ../${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-boot-lz4.img
 
       - name: 构建 Boot 镜像 (Android 13+)
-        if: inputs.android_version == 'android13' || inputs.android_version == 'android14' || inputs.android_version == 'android15' || inputs.android_version == 'android16'
+        if: inputs.artifact_upload_mode == '上传全部' && (inputs.android_version == 'android13' || inputs.android_version == 'android14' || inputs.android_version == 'android15' || inputs.android_version == 'android16')
         working-directory: bootimgs
         run: |
           gzip -n -k -f -9 ./Image > ./Image.gz
@@ -1554,6 +1567,26 @@ jobs:
           path: susfs-patch/
           if-no-files-found: warn
           compression-level: 9
+
+      - name: Collect build provenance
+        run: |
+          mkdir -p pixel6a-build-info
+          cp config/pixel6a-sources.json pixel6a-build-info/
+          git -C "$KERNEL_ROOT/common" diff --binary > pixel6a-build-info/common.patch
+          git -C "$KERNEL_ROOT/KernelSU" diff --binary > pixel6a-build-info/sukisu.patch
+          (cd "$KERNEL_ROOT" && "$REPO" manifest -r) > pixel6a-build-info/manifest.xml
+          cp "$KERNEL_ROOT/common/arch/arm64/configs/ksu.fragment" pixel6a-build-info/
+          cp "$KERNEL_ROOT/bazel-bin/common/kernel_aarch64/Module.symvers" pixel6a-build-info/ || true
+          cp "$KERNEL_ROOT/bazel-bin/common/kernel_aarch64/.config" pixel6a-build-info/ || true
+          sha256sum "$ANYKERNEL3/Image" > pixel6a-build-info/Image.sha256
+          cp config/pixel6a-sources.json "$ANYKERNEL3/build-sources.json"
+          python3 scripts/pixel6a/restrict_package.py "$ANYKERNEL3/anykernel.sh"
+
+      - name: Upload build provenance
+        uses: actions/upload-artifact@v6
+        with:
+          name: Pixel6a-build-info
+          path: pixel6a-build-info/
 
       - name: 上传 AnyKernel3 刷入包
         if: inputs.artifact_upload_mode != '上传全部'

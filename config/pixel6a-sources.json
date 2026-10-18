@@ -1,0 +1,14 @@
+{
+  "target": "Pixel 6a (bluejay), CP3A.261005.002.A1",
+  "status": "Experimental build candidate; boot compatibility unverified",
+  "builder_base": "zzh20188/GKI_KernelSU_SUSFS@fbbc689739017f6e22da38a73b5acfb2315251ad",
+  "common": "1563b4144ef81c66cfbe02e85bb3570fd2167dfd",
+  "sukisu_builtin": "ee35e65428054476c279eae59f7f2bba272040b9",
+  "susfs": "5369359dbd10f6dd8cbdd59d1df7b788b29b168c",
+  "anykernel3": "e1e9dce98430c5c6f231f7094a8c7f4ecaf50948",
+  "manager_target": "SukiSU 4.2.1 UAPI 5",
+  "susfs_enabled": true,
+  "kpm_enabled": false,
+  "bbg_enabled": false,
+  "extra_zram_enabled": false
+}
